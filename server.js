@@ -7,27 +7,47 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Frontend dosyalarını sunmak için public klasörünü aktif et
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, '/')));
 
-let players = {};
+// Basit kullanıcı veritabanı (hafızada tutulur)
+let users = {}; // { username: password }
+let players = {}; // { socketId: { username, x, y, color } }
 
 io.on('connection', (socket) => {
-    console.log(`Bir oyuncu bağlandı: ${socket.id}`);
+    console.log(`Bir bağlantı sağlandı: ${socket.id}`);
 
-    // Yeni oyuncuyu rastgele bir renkle kaydet
-    players[socket.id] = {
-        id: socket.id,
-        x: Math.random() * 600 + 100,
-        y: Math.random() * 400 + 100,
-        color: '#' + Math.floor(Math.random()*16777215).toString(16),
-        score: 100
-    };
+    // Kayıt olma isteği
+    socket.on('register', (data) => {
+        if (users[data.username]) {
+            socket.emit('authResponse', { success: false, message: 'Bu kullanıcı adı zaten alınmış!' });
+        } else {
+            users[data.username] = data.password;
+            socket.emit('authResponse', { success: true, message: 'Kayıt başarılı! Şimdi giriş yapabilirsin.' });
+        }
+    });
 
-    // Tüm oyunculara güncel oyuncu listesini gönder
-    io.emit('updatePlayers', players);
+    // Giriş yapma isteği
+    socket.on('login', (data) => {
+        if (users[data.username] && users[data.username] === data.password) {
+            socket.emit('authResponse', { success: true, username: data.username });
+        } else {
+            socket.emit('authResponse', { success: false, message: 'Hatalı kullanıcı adı veya şifre!' });
+        }
+    });
 
-    // Oyuncu haritada tıkladığında veya hamle yaptığında
+    // Oyuna giriş yapıldığında
+    socket.on('joinGame', (username) => {
+        players[socket.id] = {
+            id: socket.id,
+            username: username,
+            x: Math.random() * 600 + 100,
+            y: Math.random() * 400 + 100,
+            color: '#' + Math.floor(Math.random()*16777215).toString(16)
+        };
+        io.emit('updatePlayers', players);
+    });
+
+    // Hareket etme
     socket.on('playerMove', (data) => {
         if (players[socket.id]) {
             players[socket.id].x = data.x;
@@ -36,11 +56,20 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Oyuncu ayrıldığında
+    // Chat mesajı
+    socket.on('chatMessage', (msg) => {
+        if (players[socket.id]) {
+            io.emit('chatMessage', { username: players[socket.id].username, text: msg });
+        }
+    });
+
+    // Çıkış yapma
     socket.on('disconnect', () => {
-        console.log(`Oyuncu ayrıldı: ${socket.id}`);
-        delete players[socket.id];
-        io.emit('updatePlayers', players);
+        if (players[socket.id]) {
+            delete players[socket.id];
+            io.emit('updatePlayers', players);
+        }
+        console.log(`Bağlantı koptu: ${socket.id}`);
     });
 });
 
