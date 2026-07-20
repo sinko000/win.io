@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Territorial.io Benzeri Oyun</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: #2b4c7e;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+        #info {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="info">Haritaya tıklayarak hareket et!</div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <!-- Socket.io kütüphanesini dahil ediyoruz -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let players = {};
+
+        // Haritaya tıklandığında sunucuya yeni konumu bildir
+        canvas.addEventListener('click', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            socket.emit('playerMove', { x, y });
+        });
+
+        // Sunucudan gelen oyuncu verilerini al
+        socket.on('updatePlayers', (serverPlayers) => {
+            players = serverPlayers;
+        });
+
+        // Oyun döngüsü (Ekranı sürekli yeniler)
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Her oyuncuyu daire olarak çiz
+            for (let id in players) {
+                let p = players[id];
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 20, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+                ctx.closePath();
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+    </script>
+</body>
+</html>
